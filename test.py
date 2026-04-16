@@ -4,7 +4,7 @@ import pandas as pd
 # ページ設定
 st.set_page_config(page_title="PFC SYSTEM ver03", layout="wide")
 
-# --- 定数定義 ---
+# --- 定数定義---
 FOOD_DB = {
     "朝食": {
         "ソイプロテイン (Verifist)": {"kcal": 106.3, "p": 21.0, "f": 0.6},
@@ -50,7 +50,6 @@ TRAINING_DB = {
 }
 
 # --- サイドバー設定 ---
-st.sidebar.header("USER PROFILE")
 st.sidebar.header("USER PROFILE")
 gender = st.sidebar.radio("生物学的性別", ["男性", "女性"], index=0) # デフォルト男性
 weight = st.sidebar.number_input("現在の体重 (kg)", value=73.3, step=0.1)
