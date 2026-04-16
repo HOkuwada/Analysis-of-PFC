@@ -4,7 +4,7 @@ import pandas as pd
 # ページ設定
 st.set_page_config(page_title="PFC SYSTEM ver03", layout="wide")
 
-# --- 定数定義（ひかるさん専用データベース） ---
+# --- 定数定義 ---
 FOOD_DB = {
     "朝食": {
         "ソイプロテイン (Verifist)": {"kcal": 106.3, "p": 21.0, "f": 0.6},
