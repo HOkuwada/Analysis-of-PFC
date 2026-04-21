@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="PFC SYSTEM ver04", layout="wide")
+st.set_page_config(page_title="PFC SYSTEM ver05", layout="wide")
 
 # --- 定数定義 ---
 
@@ -31,7 +31,7 @@ FOOD_DB = {
         "ソイプロテイン (Verifist)": {"kcal": 106.3, "p": 21.0, "f": 0.6},
         "納豆定食 (米300g+納豆1+汁)": {"kcal": 608.0, "p": 17.9, "f": 7.4},
         "卵かけご飯 (米300g+卵1)": {"kcal": 560.0, "p": 13.5, "f": 7.5},
-        "カスタム作成": None, # 単品組み合わせ用に追加
+        "カスタム作成": None,
         "手動入力": None
     },
     "昼食": {
@@ -45,6 +45,7 @@ FOOD_DB = {
         "銀鮭定食 (米300g+鮭1+納豆1)": {"kcal": 818.0, "p": 41.3, "f": 16.3},
         "鶏肉焼き定食": {"kcal": 750.0, "p": 45.0, "f": 12.0},
         "鶏肉のトマト煮定食": {"kcal": 680.0, "p": 40.0, "f": 10.0},
+        "タコス (自家製スパイスミンチ)": {"kcal": 693.0, "p": 33.2, "f": 26.6}, # NEW
         "カスタム作成": None,
         "手動入力": None
     },
@@ -56,19 +57,27 @@ FOOD_DB = {
     }
 }
 
-# 特殊メニュー（時間ベースのMETs計算用）
 SPECIAL_TRAINING_DB = {
     "山澤腹筋 (4分スーパーセット)": {"base_mets": 8.0, "duration_min": 4},
     "山澤腕トレ (5分ダンベル)": {"base_mets": 5.0, "duration_min": 5},
     "山澤肩トレ (7分ダンベル)": {"base_mets": 6.0, "duration_min": 7}
 }
 
+# 【NEW】追加種目の拡充
 TRAINING_DB = {
     "ブルガリアンスクワット (高強度)": 0.04,
+    "ダンベル・ルーマニアン・デッドリフト": 0.04,
+    "バーベルカール": 0.03,
+    "ワンハンドロウ": 0.04,
     "ダンベル・スクイーズ・プレス": 0.03,
+    "ダンベル・フレンチプレス": 0.03,
+    "ダンベル・プルオーバー": 0.04,
     "ベンチプレス": 0.03,
     "デッドリフト": 0.05,
-    "懸垂": 0.04
+    "懸垂": 0.04,
+    "アブローラー": 0.05,
+    "米袋キャリー (30kg相当・Z軸強化)": 0.06, # 基礎フレーム構築用
+    "その他": 0.03
 }
 
 # --- サイドバー設定 ---
@@ -100,13 +109,11 @@ def get_meal_stats(category):
     st.subheader(f"🍴 {category}")
     selection = st.selectbox(f"{category}メニューを選択", list(FOOD_DB[category].keys()), key=f"sel_{category}")
     
-    # プリセット選択時
     if selection not in ["カスタム作成", "手動入力"]:
         preset = FOOD_DB[category][selection]
         st.info(f"NUTRITION： {preset['kcal']} kcal | P: {preset['p']}g | F: {preset['f']}g")
         return preset["kcal"], preset["p"], preset["f"]
         
-    # 【NEW】カスタム作成（単品組み合わせ）選択時
     elif selection == "カスタム作成":
         st.markdown("**:blue[▼ 食材を組み合わせて計算]**")
         selected_items = st.multiselect("食材を追加", list(SINGLE_FOOD_DB.keys()), key=f"multi_{category}")
@@ -116,9 +123,7 @@ def get_meal_stats(category):
         if selected_items:
             for item in selected_items:
                 col1, col2 = st.columns([3, 1])
-                # 食材名を表示
                 col1.write(f"・{item}")
-                # 数量（倍率）を入力。例：米200gなら「2.0」、納豆2パックなら「2.0」
                 qty = col2.number_input("数量 (倍)", min_value=0.0, value=1.0, step=0.5, key=f"qty_{category}_{item}")
                 
                 k += SINGLE_FOOD_DB[item]["kcal"] * qty
@@ -128,7 +133,6 @@ def get_meal_stats(category):
             st.success(f"【合計】 {k:.1f} kcal | P: {p:.1f}g | F: {f:.1f}g")
         return k, p, f
         
-    # 手動入力時
     else:
         c1, c2, c3 = st.columns(3)
         k = c1.number_input("kcal", min_value=0.0, key=f"{category}_k")
@@ -162,17 +166,45 @@ for sm in special_menu:
     st.metric("推定燃焼", f"{sm_kcal:.1f} kcal")
     special_kcal += sm_kcal
 
-selected_trainings = st.multiselect("通常種目メニュー", list(TRAINING_DB.keys()) + ["その他"])
+# 【NEW】通常種目メニュー (session_state を利用した動的フォーム)
+st.subheader("🏋️ 通常種目メニュー (複数セット・ドロップセット対応)")
+
+# session_stateの初期化
+if "training_list" not in st.session_state:
+    st.session_state.training_list = []
+
+# 追加用UI
+col_sel, col_btn = st.columns([3, 1])
+with col_sel:
+    new_ex = st.selectbox("種目を選択して追加", list(TRAINING_DB.keys()))
+with col_btn:
+    # 位置調整用
+    st.write("") 
+    if st.button("➕ リストに追加", use_container_width=True):
+        st.session_state.training_list.append(new_ex)
+        st.rerun()
+
 normal_kcal = 0
-for t in selected_trainings:
-    col1, col2, col3, col4 = st.columns(4)
-    w = col1.number_input(f"重量(kg) [{t}]", value=0.0, key=f"w_{t}")
-    r = col2.number_input(f"レップ数 [{t}]", value=10, key=f"r_{t}")
-    s = col3.number_input(f"セット数 [{t}]", value=3, key=f"s_{t}")
-    factor = TRAINING_DB.get(t, 0.03)
-    burn = w * r * s * factor
-    col4.metric("燃焼", f"{burn:.1f} kcal")
-    normal_kcal += burn
+
+# 追加された種目の入力UI
+if st.session_state.training_list:
+    st.markdown("**:blue[▼ 今日のトレーニングログ]**")
+    for i, t in enumerate(st.session_state.training_list):
+        # UIをスッキリさせるためにカラム幅を調整
+        c_name, c_w, c_r, c_s, c_burn = st.columns([2.5, 1.5, 1.5, 1.5, 1])
+        c_name.markdown(f"<div style='padding-top:2rem'><b>{i+1}. {t}</b></div>", unsafe_allow_html=True)
+        w = c_w.number_input("重量(kg)", value=0.0, step=1.0, key=f"w_{i}_{t}")
+        r = c_r.number_input("レップ数", value=10, step=1, key=f"r_{i}_{t}")
+        s = c_s.number_input("セット数", value=3, step=1, key=f"s_{i}_{t}")
+        
+        factor = TRAINING_DB.get(t, 0.03)
+        burn = w * r * s * factor
+        c_burn.metric("燃焼", f"{burn:.1f} kcal")
+        normal_kcal += burn
+        
+    if st.button("🗑️ リストを全てクリア"):
+        st.session_state.training_list = []
+        st.rerun()
 
 # --- 最終計算 ---
 total_intake = b_k + l_k + d_k + s_k
@@ -184,7 +216,7 @@ net_calories = total_intake - total_burn
 
 # --- リザルト表示 ---
 st.markdown("---")
-st.header("📊TOTAL RESULT")
+st.header("📊 TOTAL RESULT")
 r1, r2, r3 = st.columns(3)
 r1.metric("総摂取", f"{total_intake:.1f} kcal", f"目標比 {total_intake - target_kcal:.1f}", delta_color="inverse")
 r2.metric("総タンパク質", f"{total_p:.1f} g", f"目標比 {total_p - target_p:.1f} g")
